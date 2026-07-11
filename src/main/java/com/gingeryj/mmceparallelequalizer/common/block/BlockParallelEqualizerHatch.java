@@ -45,6 +45,12 @@ public final class BlockParallelEqualizerHatch extends BlockContainer {
     }
 
     @Override
+    public boolean hasTileEntity(IBlockState state) {
+        // Variable groups are reduced to candidate states before MMCE discovers machine components.
+        return true;
+    }
+
+    @Override
     public EnumBlockRenderType getRenderType(IBlockState state) {
         return EnumBlockRenderType.MODEL;
     }

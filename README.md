@@ -55,6 +55,31 @@ The hatch must be declared in the machine structure JSON. Placing it next to a m
 }
 ```
 
+也可以通过 MMCE 变量组引用。只要变量组包含 `mmceparallelequalizer:parallel_equalizer_hatch@0`，均分仓会被识别为机器组件并自动绑定。  
+The hatch can also be referenced through an MMCE variable group. When a group contains `mmceparallelequalizer:parallel_equalizer_hatch@0`, the hatch is discovered as a machine component and binds automatically.
+
+```json
+{
+  "casings_allput": [
+    "modularmachinery:blockcasing@0",
+    "mmceparallelequalizer:parallel_equalizer_hatch@0"
+  ]
+}
+```
+
+```json
+{
+  "parts": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "elements": "casings_allput"
+    }
+  ]
+}
+```
+
 均分逻辑只作用于 MMCE 工厂控制器，因此机器需要启用工厂模式，例如：  
 The equalization logic only applies to MMCE factory controllers, so the machine must use factory mode, for example:
 
