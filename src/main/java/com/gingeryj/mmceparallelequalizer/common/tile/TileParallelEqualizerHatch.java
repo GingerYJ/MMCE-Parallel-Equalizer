@@ -7,6 +7,7 @@ import github.kasuminova.mmce.common.event.machine.MachineStructureUpdateEvent;
 import github.kasuminova.mmce.common.event.recipe.FactoryRecipeStartEvent;
 import hellfirepvp.modularmachinery.common.crafting.ActiveMachineRecipe;
 import hellfirepvp.modularmachinery.common.crafting.ComponentType;
+import hellfirepvp.modularmachinery.common.crafting.helper.ProcessingComponent;
 import hellfirepvp.modularmachinery.common.crafting.helper.RecipeCraftingContext;
 import hellfirepvp.modularmachinery.common.machine.IOType;
 import hellfirepvp.modularmachinery.common.machine.MachineComponent;
@@ -18,8 +19,10 @@ import net.minecraft.util.ITickable;
 import net.minecraft.util.math.BlockPos;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class TileParallelEqualizerHatch extends TileColorableMachineComponent
     implements MachineComponentTileNotifiable, ITickable {
@@ -30,7 +33,7 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
     private boolean bound;
     private long boundController;
     private String boundMachine = "";
-    private int bindingCheckTicks;
+    private int bindingCheckTicks = 19;
 
     private final MachineComponent<TileParallelEqualizerHatch> component = new MachineComponent<TileParallelEqualizerHatch>(IOType.INPUT) {
         @Override
@@ -81,7 +84,7 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
         }
         if (++bindingCheckTicks >= 20) {
             bindingCheckTicks = 0;
-            getBoundController();
+            refreshBinding();
         }
     }
 
@@ -158,6 +161,81 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
         return null;
     }
 
+    private void refreshBinding() {
+        Object controller = getBoundController();
+        if (controller != null) {
+            if (isPartOfControllerPattern(controller)) {
+                ensureControllerComponent(controller);
+                return;
+            }
+            clearBinding();
+        }
+
+        for (TileEntity tileEntity : new ArrayList<>(world.loadedTileEntityList)) {
+            if (!isMultiblockController(tileEntity) || !isStructureFormed(tileEntity)) {
+                continue;
+            }
+            if (!isPartOfControllerPattern(tileEntity)) {
+                continue;
+            }
+
+            ensureControllerComponent(tileEntity);
+            bindMachine(tileEntity);
+            return;
+        }
+    }
+
+    private static boolean isMultiblockController(TileEntity tileEntity) {
+        Class<?> type = tileEntity.getClass();
+        while (type != null) {
+            if ("hellfirepvp.modularmachinery.common.tiles.base.TileMultiblockMachineController".equals(type.getName())) {
+                return true;
+            }
+            type = type.getSuperclass();
+        }
+        return false;
+    }
+
+    private boolean isPartOfControllerPattern(Object controller) {
+        BlockPos controllerPos = getControllerPosition(controller);
+        Object pattern = invoke(controller, "getFoundPattern");
+        if (controllerPos == null || pattern == null) {
+            return false;
+        }
+        Object positions = invoke(pattern, "getPattern");
+        return positions instanceof Map && ((Map<?, ?>) positions).containsKey(getPos().subtract(controllerPos));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void ensureControllerComponent(Object controller) {
+        Object componentValue = invoke(controller, "getFoundComponents");
+        if (!(componentValue instanceof Map)) {
+            return;
+        }
+
+        Map foundComponents = (Map) componentValue;
+        for (Object value : foundComponents.values()) {
+            if (value instanceof Map && ((Map) value).containsKey(this)) {
+                return;
+            }
+        }
+
+        ProcessingComponent<TileParallelEqualizerHatch> processingComponent = new ProcessingComponent<>(component, this, null);
+        if (foundComponents.isEmpty()) {
+            Map<TileEntity, ProcessingComponent<?>> components = new ConcurrentHashMap<>();
+            components.put(this, processingComponent);
+            foundComponents.put(0L, components);
+            return;
+        }
+
+        // MMCE replicates general components into every factory group.
+        for (Object value : foundComponents.values()) {
+            if (value instanceof Map) {
+                ((Map) value).put(this, processingComponent);
+            }
+        }
+    }
+
     private void clearBinding() {
         if (!bound) {
             return;
@@ -165,6 +243,7 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
         bound = false;
         boundController = 0L;
         boundMachine = "";
+        bindingCheckTicks = 19;
         markForUpdateSync();
     }
 
