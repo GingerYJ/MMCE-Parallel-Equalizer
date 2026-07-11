@@ -67,7 +67,7 @@ unimined.minecraft {
 
     cleanroom {
         if (propertyBool('use_access_transformer')) {
-            accessTransformer "${rootProject.projectDir}/src/main/resources/${propertyString('access_transformer_locations')}"
+            accessTransformer rootProject.file(propertyString('access_transformer_locations'))
         }
         loader "0.5.12-alpha"
         runs.all {
@@ -208,7 +208,7 @@ jar {
                     attribute_map['FMLCorePluginContainsFMLMod'] = true
                 }
             }
-            if (propertyBool('use_access_transformer')) {
+            if (propertyBool('use_access_transformer') && !propertyBool('development_only_access_transformer')) {
                 attribute_map['FMLAT'] = propertyString('access_transformer_locations')
             }
             attributes(attribute_map)

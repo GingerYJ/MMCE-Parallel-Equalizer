@@ -46,7 +46,7 @@ public final class BlockParallelEqualizerHatch extends BlockContainer {
 
     @Override
     public boolean hasTileEntity(IBlockState state) {
-        // Variable groups are reduced to candidate states before MMCE discovers machine components.
+        // This keeps variable descriptors in MMCE's tile-component scan cache.
         return true;
     }
 
