@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "normal": {
+      "model": "mmceparallelequalizer:parallel_equalizer_hatch"
+    }
+  }
+}

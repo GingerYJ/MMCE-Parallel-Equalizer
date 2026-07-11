@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "mmceparallelequalizer",
+    "name": "MMCE Parallel Equalizer",
+    "description": "为 MMCE 工厂提供并行均分仓，将有效并行数均分限制到各线程，并显示绑定机器与分配统计。 / Adds a Parallel Equalizer Hatch for MMCE factories, evenly caps effective parallelism per thread, and displays binding and allocation statistics.",
+    "version": "1.0.0",
+    "mcversion": "1.12.2",
+    "url": "",
+    "updateJSON": "",
+    "authorList": ["GingerYJ"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": ["modularmachinery@[2.3.2,)"]
+  }
+]

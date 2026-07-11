@@ -1,0 +1,8 @@
+tile.mmceparallelequalizer.parallel_equalizer_hatch.name=Parallel Equalizer Hatch
+itemGroup.mmceparallelequalizer=MMCE Parallel Equalizer
+gui.mmceparallelequalizer.parallel_equalizer.title=Parallel Equalizer Hatch
+gui.mmceparallelequalizer.parallel_equalizer.machine=Bound Machine: %s
+gui.mmceparallelequalizer.parallel_equalizer.threads=Threads: %s
+gui.mmceparallelequalizer.parallel_equalizer.parallelism=Parallelism: %s
+gui.mmceparallelequalizer.parallel_equalizer.quota=Per-thread Parallelism: %s
+gui.mmceparallelequalizer.parallel_equalizer.unbound=No machine bound

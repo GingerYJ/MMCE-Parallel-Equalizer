@@ -1,0 +1,8 @@
+tile.mmceparallelequalizer.parallel_equalizer_hatch.name=并行均分仓
+itemGroup.mmceparallelequalizer=并行均分仓
+gui.mmceparallelequalizer.parallel_equalizer.title=并行均分仓
+gui.mmceparallelequalizer.parallel_equalizer.machine=绑定机器：%s
+gui.mmceparallelequalizer.parallel_equalizer.threads=线程数量：%s
+gui.mmceparallelequalizer.parallel_equalizer.parallelism=并行数量：%s
+gui.mmceparallelequalizer.parallel_equalizer.quota=单线程均分：%s
+gui.mmceparallelequalizer.parallel_equalizer.unbound=未绑定机器
