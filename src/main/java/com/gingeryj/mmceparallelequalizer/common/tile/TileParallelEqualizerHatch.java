@@ -1,11 +1,7 @@
 package com.gingeryj.mmceparallelequalizer.common.tile;
 
 import com.gingeryj.mmceparallelequalizer.common.component.ParallelEqualizerComponents;
-import github.kasuminova.mmce.common.event.Phase;
 import github.kasuminova.mmce.common.event.machine.MachineEvent;
-import github.kasuminova.mmce.common.event.machine.MachineStructureFormedEvent;
-import github.kasuminova.mmce.common.event.machine.MachineStructureUpdateEvent;
-import github.kasuminova.mmce.common.event.machine.MachineTickEvent;
 import github.kasuminova.mmce.common.event.recipe.FactoryRecipeFinishEvent;
 import github.kasuminova.mmce.common.event.recipe.FactoryRecipeStartEvent;
 import hellfirepvp.modularmachinery.common.crafting.ActiveMachineRecipe;
@@ -17,17 +13,20 @@ import hellfirepvp.modularmachinery.common.tiles.base.MachineComponentTileNotifi
 import hellfirepvp.modularmachinery.common.tiles.base.TileColorableMachineComponent;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 public final class TileParallelEqualizerHatch extends TileColorableMachineComponent
     implements MachineComponentTileNotifiable {
 
-    private static final int CHECK_INTERVAL_TICKS = 10;
-    private static final Map<ActiveMachineRecipe, Integer> NATURAL_PARALLELISM = new WeakHashMap<>();
-    private static final Map<Object, AllocationState> ALLOCATION_STATES = new WeakHashMap<>();
+    private static final Map<ActiveMachineRecipe, Boolean> INITIALIZED_RECIPES = new WeakHashMap<>();
+    private static final ClassValue<FactoryAccess> FACTORY_ACCESS = new ClassValue<FactoryAccess>() {
+        @Override
+        protected FactoryAccess computeValue(Class<?> type) {
+            return FactoryAccess.create(type);
+        }
+    };
 
     private final MachineComponent<TileParallelEqualizerHatch> component =
         new MachineComponent<TileParallelEqualizerHatch>(IOType.INPUT) {
@@ -49,27 +48,11 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
 
     @Override
     public void onMachineEvent(MachineEvent event) {
-        if (event instanceof MachineTickEvent) {
-            Object controller = event.getController();
-            Integer ticksExisted = getOptionalInt(controller, "getTicksExisted");
-            if (((MachineTickEvent) event).phase == Phase.END
-                && ticksExisted != null && ticksExisted % CHECK_INTERVAL_TICKS == 0) {
-                equalizeIfNeeded(controller);
-            }
-            return;
-        }
-
-        if (event instanceof MachineStructureFormedEvent || event instanceof MachineStructureUpdateEvent) {
-            markDirty(event.getController());
-            return;
-        }
-
         if (event instanceof FactoryRecipeFinishEvent) {
             ActiveMachineRecipe activeRecipe = ((FactoryRecipeFinishEvent) event).getActiveRecipe();
             if (activeRecipe != null) {
-                NATURAL_PARALLELISM.remove(activeRecipe);
+                forgetRecipe(activeRecipe);
             }
-            markDirty(event.getController());
             return;
         }
 
@@ -80,15 +63,13 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
         FactoryRecipeStartEvent startEvent = (FactoryRecipeStartEvent) event;
         RecipeCraftingContext context = startEvent.getContext();
         ActiveMachineRecipe activeRecipe = startEvent.getActiveRecipe();
-        if (context == null || activeRecipe == null) {
+        Object factory = startEvent.getController();
+        if (context == null || activeRecipe == null || factory == null) {
             return;
         }
 
-        markDirty(startEvent.getController());
-        NATURAL_PARALLELISM.putIfAbsent(activeRecipe, Math.max(1, activeRecipe.getParallelism()));
-
-        int quota = getStartupQuota(startEvent.getController());
-        if (quota < 1) {
+        int quota = getStaticQuota(factory);
+        if (quota < 1 || !rememberRecipe(activeRecipe)) {
             return;
         }
 
@@ -96,143 +77,72 @@ public final class TileParallelEqualizerHatch extends TileColorableMachineCompon
     }
 
     /**
-     * Keep enough parallelism available for other threads while MMCE is starting
-     * recipes one at a time. The final allocation is performed at tick END,
-     * after all threads that could start this tick have been discovered.
+     * Reserve a fixed share for every configured factory thread. This deliberately
+     * does not reclaim idle threads' shares, avoiding periodic reallocation work.
      */
-    private static int getStartupQuota(Object factory) {
-        try {
-            int maxThreads = getInt(factory, "getMaxThreads");
-            Object coreThreads = invoke(factory, "getCoreRecipeThreads");
-            int maxParallelism = getInt(factory, "getMaxParallelism");
-            if (!(coreThreads instanceof Map)) {
-                return -1;
-            }
-
-            int threadSlots = Math.max(1, maxThreads + ((Map<?, ?>) coreThreads).size());
-            return Math.max(1, Math.max(0, maxParallelism) / threadSlots);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException | ClassCastException ignored) {
+    private static int getStaticQuota(Object factory) {
+        FactoryAccess access = FACTORY_ACCESS.get(factory.getClass());
+        Integer maxThreads = access.getInt(factory, access.maxThreads);
+        Integer maxParallelism = access.getInt(factory, access.maxParallelism);
+        Object coreThreads = access.invoke(factory, access.coreRecipeThreads);
+        if (maxThreads == null || maxParallelism == null || !(coreThreads instanceof Map)) {
             return -1;
         }
+
+        int threadSlots = Math.max(1, maxThreads + ((Map<?, ?>) coreThreads).size());
+        return Math.max(1, maxParallelism / threadSlots);
     }
 
-    /**
-     * Reallocate the complete machine budget among threads with an active
-     * recipe. This uses the active list instead of the configured thread cap,
-     * so idle slots do not reduce the share of working threads. Integer
-     * remainders are handed out one by one, and a thread's recipe limit is
-     * respected before any remaining budget is offered to later threads.
-     */
-    private static void equalizeIfNeeded(Object factory) {
-        Integer maxParallelism = getOptionalInt(factory, "getMaxParallelism");
-        if (maxParallelism == null) {
-            return;
-        }
-
-        boolean shouldEqualize;
-        synchronized (ALLOCATION_STATES) {
-            AllocationState state = ALLOCATION_STATES.computeIfAbsent(factory, ignored -> new AllocationState());
-            shouldEqualize = state.dirty || state.lastMaxParallelism != maxParallelism;
-            state.dirty = false;
-            state.lastMaxParallelism = maxParallelism;
-        }
-
-        if (shouldEqualize) {
-            equalizeActiveThreads(factory, Math.max(0, maxParallelism));
+    private static boolean rememberRecipe(ActiveMachineRecipe activeRecipe) {
+        synchronized (INITIALIZED_RECIPES) {
+            return INITIALIZED_RECIPES.put(activeRecipe, Boolean.TRUE) == null;
         }
     }
 
-    private static void markDirty(Object factory) {
-        synchronized (ALLOCATION_STATES) {
-            ALLOCATION_STATES.computeIfAbsent(factory, ignored -> new AllocationState()).dirty = true;
+    private static void forgetRecipe(ActiveMachineRecipe activeRecipe) {
+        synchronized (INITIALIZED_RECIPES) {
+            INITIALIZED_RECIPES.remove(activeRecipe);
         }
     }
 
-    private static void equalizeActiveThreads(Object factory, int maxParallelism) {
-        Object value = invoke(factory, "getRecipeThreadList");
-        if (!(value instanceof Object[])) {
-            return;
+    private static final class FactoryAccess {
+        private static final FactoryAccess UNSUPPORTED = new FactoryAccess(null, null, null);
+
+        private final Method maxThreads;
+        private final Method coreRecipeThreads;
+        private final Method maxParallelism;
+
+        private FactoryAccess(Method maxThreads, Method coreRecipeThreads, Method maxParallelism) {
+            this.maxThreads = maxThreads;
+            this.coreRecipeThreads = coreRecipeThreads;
+            this.maxParallelism = maxParallelism;
         }
 
-        List<ActiveThread> activeThreads = new ArrayList<>();
-        for (Object thread : (Object[]) value) {
-            if (thread == null) {
-                continue;
+        private static FactoryAccess create(Class<?> type) {
+            try {
+                return new FactoryAccess(
+                    type.getMethod("getMaxThreads"),
+                    type.getMethod("getCoreRecipeThreads"),
+                    type.getMethod("getMaxParallelism"));
+            } catch (NoSuchMethodException | SecurityException ignored) {
+                return UNSUPPORTED;
             }
-
-            Object recipeValue = invoke(thread, "getActiveRecipe");
-            if (!(recipeValue instanceof ActiveMachineRecipe)) {
-                continue;
-            }
-
-            Object contextValue = invoke(thread, "getContext");
-            RecipeCraftingContext context = contextValue instanceof RecipeCraftingContext
-                ? (RecipeCraftingContext) contextValue : null;
-            activeThreads.add(new ActiveThread((ActiveMachineRecipe) recipeValue, context));
         }
 
-        if (activeThreads.isEmpty()) {
-            return;
-        }
-
-        int remaining = maxParallelism;
-        for (int i = 0; i < activeThreads.size(); i++) {
-            ActiveThread activeThread = activeThreads.get(i);
-            int threadsLeft = activeThreads.size() - i;
-            int fairShare = Math.max(1, (remaining + threadsLeft - 1) / threadsLeft);
-            int recipeLimit = NATURAL_PARALLELISM.getOrDefault(
-                activeThread.recipe, Math.max(1, activeThread.recipe.getMaxParallelism()));
-            int allocation = Math.min(fairShare, recipeLimit);
-
-            if (activeThread.context != null) {
-                activeThread.context.setParallelism(allocation);
-            } else {
-                activeThread.recipe.setParallelism(allocation);
-            }
-            remaining = Math.max(0, remaining - allocation);
-        }
-    }
-
-    private static int getInt(Object target, String methodName)
-        throws IllegalAccessException, InvocationTargetException, NoSuchMethodException {
-        Object value = invokeRequired(target, methodName);
-        return value instanceof Integer ? (Integer) value : -1;
-    }
-
-    private static Integer getOptionalInt(Object target, String methodName) {
-        try {
-            Object value = invokeRequired(target, methodName);
+        private Integer getInt(Object target, Method method) {
+            Object value = invoke(target, method);
             return value instanceof Integer ? (Integer) value : null;
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException ignored) {
-            return null;
         }
-    }
 
-    private static Object invoke(Object target, String methodName) {
-        try {
-            return invokeRequired(target, methodName);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException ignored) {
-            return null;
+        private Object invoke(Object target, Method method) {
+            if (method == null) {
+                return null;
+            }
+            try {
+                return method.invoke(target);
+            } catch (IllegalAccessException | InvocationTargetException ignored) {
+                return null;
+            }
         }
-    }
-
-    private static Object invokeRequired(Object target, String methodName)
-        throws IllegalAccessException, InvocationTargetException, NoSuchMethodException {
-        return target.getClass().getMethod(methodName).invoke(target);
-    }
-
-    private static final class ActiveThread {
-        private final ActiveMachineRecipe recipe;
-        private final RecipeCraftingContext context;
-
-        private ActiveThread(ActiveMachineRecipe recipe, RecipeCraftingContext context) {
-            this.recipe = recipe;
-            this.context = context;
-        }
-    }
-
-    private static final class AllocationState {
-        private boolean dirty = true;
-        private int lastMaxParallelism = Integer.MIN_VALUE;
     }
 }
