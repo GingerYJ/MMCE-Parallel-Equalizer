@@ -20,8 +20,6 @@ An add-on for Modular Machinery: Community Edition (MMCE) on Minecraft 1.12.2.
 ## 功能 / Features
 
 - **线程均分 / Per-thread allocation:** 每个配方线程在启动时获得固定的并行上限。 / Each recipe thread receives a fixed parallelism limit when it starts.
-- **自动绑定 / Automatic binding:** 机器结构形成或更新时，均分仓会自动绑定控制器。 / The hatch automatically binds to the controller when the machine structure forms or updates.
-- **状态界面 / Status GUI:** 右键均分仓可查看绑定机器、线程数、有效并行数和单线程均分值。 / Right-click the hatch to view the bound machine, thread count, effective parallelism, and per-thread allocation.
 - **轻量运行 / Lightweight operation:** 均分仓不会创建额外线程，也不会为配方增加材料或能源需求。 / The hatch creates no extra threads and adds no material or energy requirements to recipes.
 - **专属创造栏 / Creative tab:** 方块位于独立的 MMCE Parallel Equalizer 创造栏中。 / The block is available in its own MMCE Parallel Equalizer creative tab.
 
@@ -39,8 +37,8 @@ Place MMCE, this mod, and MMCE's own runtime dependencies in the `mods` folder o
 
 ## 机器 JSON / Machine JSON
 
-均分仓必须明确写入机器结构 JSON；仅在机器旁边放置方块不会绑定。下面的坐标只是示例，请按实际结构调整。  
-The hatch must be declared in the machine structure JSON. Placing it next to a machine is not enough. The coordinates below are only an example and must be adjusted for the actual structure.
+均分仓必须作为机器结构 JSON 的直接组件写入；仅在机器旁边放置方块或写入变量组都不会绑定。下面的坐标只是示例，请按实际结构调整。
+The hatch must be declared directly in the machine structure JSON. Placing it next to a machine or adding it through a variable group does not bind it. The coordinates below are only an example and must be adjusted for the actual structure.
 
 ```json
 {
@@ -49,32 +47,7 @@ The hatch must be declared in the machine structure JSON. Placing it next to a m
       "x": 0,
       "y": 0,
       "z": 1,
-      "elements": "mmceparallelequalizer:parallel_equalizer_hatch"
-    }
-  ]
-}
-```
-
-也可以通过 MMCE 变量组引用。只要变量组包含 `mmceparallelequalizer:parallel_equalizer_hatch@0`，均分仓会被识别为机器组件并自动绑定。  
-The hatch can also be referenced through an MMCE variable group. When a group contains `mmceparallelequalizer:parallel_equalizer_hatch@0`, the hatch is discovered as a machine component and binds automatically.
-
-```json
-{
-  "casings_allput": [
-    "modularmachinery:blockcasing@0",
-    "mmceparallelequalizer:parallel_equalizer_hatch@0"
-  ]
-}
-```
-
-```json
-{
-  "parts": [
-    {
-      "x": 0,
-      "y": 0,
-      "z": 1,
-      "elements": "casings_allput"
+      "elements": "mmceparallelequalizer:parallel_equalizer_hatch@0"
     }
   ]
 }

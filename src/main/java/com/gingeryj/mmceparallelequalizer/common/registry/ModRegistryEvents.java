@@ -2,10 +2,10 @@ package com.gingeryj.mmceparallelequalizer.common.registry;
 
 import com.gingeryj.mmceparallelequalizer.Reference;
 import com.gingeryj.mmceparallelequalizer.common.component.ParallelEqualizerComponents;
+import com.gingeryj.mmceparallelequalizer.common.item.ItemBlockParallelEqualizerHatch;
 import hellfirepvp.modularmachinery.common.crafting.ComponentType;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -23,9 +23,7 @@ public final class ModRegistryEvents {
 
     @SubscribeEvent
     public static void registerItems(RegistryEvent.Register<Item> event) {
-        ItemBlock itemBlock = new ItemBlock(ModBlocks.PARALLEL_EQUALIZER_HATCH);
-        itemBlock.setRegistryName(ModBlocks.PARALLEL_EQUALIZER_HATCH.getRegistryName());
-        event.getRegistry().register(itemBlock);
+        event.getRegistry().register(new ItemBlockParallelEqualizerHatch(ModBlocks.PARALLEL_EQUALIZER_HATCH));
     }
 
     @SubscribeEvent
