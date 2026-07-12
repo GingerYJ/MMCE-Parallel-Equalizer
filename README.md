@@ -9,7 +9,7 @@ An add-on for Modular Machinery: Community Edition (MMCE) on Minecraft 1.12.2.
 | 当前版本 / Current version | `1.0.0` |
 | 作者 / Author | GingerYJ |
 | Minecraft | `1.12.2` |
-| MMCE | `2.3.2` |
+| MMCE | `>= 2.3.2` |
 
 ## 简介 / Overview
 
@@ -19,8 +19,9 @@ An add-on for Modular Machinery: Community Edition (MMCE) on Minecraft 1.12.2.
 
 ## 功能 / Features
 
-- **线程均分 / Per-thread allocation:** 每个配方线程在启动时获得固定的并行上限。 / Each recipe thread receives a fixed parallelism limit when it starts.
+- **线程均分 / Per-thread allocation:** 每 10 个机器 tick 检查一次，只统计拥有活动配方的线程，并把有效并行平均分配给它们。 / Every 10 machine ticks, only threads with active recipes are counted and the effective parallelism is distributed among them.
 - **轻量运行 / Lightweight operation:** 均分仓不会创建额外线程，也不会为配方增加材料或能源需求。 / The hatch creates no extra threads and adds no material or energy requirements to recipes.
+- **按需重算 / On-demand recalculation:** 每 10 个机器 tick 检查一次总并行；线程列表只在配方、结构或并行发生变化时重新计算。 / Total parallelism is checked every 10 machine ticks; the thread list is recalculated only after recipe, structure, or parallelism changes.
 - **专属创造栏 / Creative tab:** 方块位于独立的 MMCE Parallel Equalizer 创造栏中。 / The block is available in its own MMCE Parallel Equalizer creative tab.
 
 ## 环境与安装 / Requirements and Installation
@@ -88,25 +89,25 @@ RecipeBuilder.newBuilder("parallel_equalizer_test_recipe", "parallel_equalizer_t
 
 ## 分配规则 / Allocation Rules
 
-单线程均分值按以下方式计算：  
-The per-thread allocation is calculated as follows:
+工作线程的基础分配按以下方式计算，不能整除的余数逐个分给工作线程：
+The base allocation is calculated from the working thread count; any remainder is assigned one at a time:
 
 ```text
-单线程并行 = max(1, floor(机器有效并行 / 线程槽数量))
-Per-thread parallelism = max(1, floor(effective machine parallelism / thread slots))
+基础并行 = floor(机器有效并行 / 实际工作线程数)
+Base parallelism = floor(effective machine parallelism / active recipe threads)
 ```
 
-线程槽数量包含普通工厂线程和已配置的核心线程。配方最终使用的并行数不会超过配方自身可用并行或单线程均分值。  
-The thread count includes regular factory threads and configured core threads. A recipe's final parallelism cannot exceed either its own available parallelism or the per-thread allocation.
+实际工作线程是当前拥有活动配方的工厂线程；未运行配方的线程不会占用均分份额。配方最终使用的并行数不会超过配方自身上限。
+Only factory threads with an active recipe are counted; idle threads do not consume a share. A recipe's final parallelism cannot exceed its own limit.
 
 示例：`64 / 4 = 16`，所以每个线程最多使用 `16` 并行。  
 Example: `64 / 4 = 16`, so each thread can use at most `16` parallelism.
 
 注意事项 / Notes:
 
-- 计算使用整数除法，不能整除的余数不会分配。 / Integer division is used, so any remainder is left unused.
-- 空闲线程的份额不会动态转移给正在工作的线程。 / An idle thread's share is not dynamically reassigned to active threads.
-- 均分仓限制的是配方启动时的并行数，不会修改 MMCE 配置的最大线程数或最大并行数。 / The hatch limits parallelism when a recipe starts; it does not modify MMCE's configured maximum threads or maximum parallelism.
+- 不能整除的余数会逐个分配给工作线程，例如 `16 / 5` 会分配为 `4, 3, 3, 3, 3`。 / Remainders are assigned one at a time; for example, `16 / 5` becomes `4, 3, 3, 3, 3`.
+- 空闲线程不占用份额；工作线程数量变化后会在下一次 10 tick 检查时重新均分，最多延迟 9 个 tick。 / Idle threads do not consume a share; allocations are recalculated at the next 10-tick check after the working thread count changes, with a maximum delay of 9 ticks.
+- 均分仓不会修改 MMCE 配置的最大线程数或最大并行数。 / The hatch does not modify MMCE's configured maximum threads or maximum parallelism.
 - 同一台机器放置多个均分仓不会叠加均分效果。 / Multiple hatches in the same machine do not stack their equalization effect.
 
 ## 合成 / Crafting
